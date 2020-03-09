@@ -1,5 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+
+
 module Main where
 import Control.Comonad
 import Control.Monad (forever, void)
@@ -28,27 +31,24 @@ import qualified Data.Sequence as S
 import Linear.V2 (V2(..))
 import Lens.Micro ((^.))
 import Data.Matrix
-import Data.Vector as Vec (toList)  
+
 
 import CellularAutomata
 
-drawGrid::Grid Brian-> [Widget Name]
-drawGrid (Grid mtx p) = [withBorderStyle BS.unicodeBold
+drawGrid::CA (w c) c=>(w c)-> [Widget Name]
+drawGrid grid = [withBorderStyle BS.unicodeBold
             $ B.borderWithLabel (str "Conway's Game of Life")
             $ vBox rows]
         where
             rows = [hBox $ rowCells r | r <- [1..100]] 
-            rowCells  y = [drawCell2 x | x <- Vec.toList (getRow y mtx)]
+            rowCells  y = [drawCell x | x <- gridRow y grid]
             
 
-drawCell :: Cell -> Widget ()
-drawCell Alive = withAttr aliveAttr cw
-drawCell Dead  = withAttr deadAttr cw
+drawCell :: CA w c=>c-> Widget ()
+drawCell cell = withAttr (cellAtt cell) cw
 
-drawCell2::Brian -> Widget ()
-drawCell2 ALV = withAttr alvAttr cw
-drawCell2 DED = withAttr dedAttr cw
-drawCell2 DYING = withAttr dyingAttr cw
+
+
 
 
 cw::Widget ()
@@ -77,7 +77,7 @@ data Tick = Tick
 
 type Name = ()
 
-app::App (Grid Brian) Tick Name
+app::(Comonad w, CA (w c) c)=>App (w c) Tick Name
 app = App{  appDraw = drawGrid
           , appChooseCursor = neverShowCursor
           , appHandleEvent = handleEvent
@@ -85,7 +85,8 @@ app = App{  appDraw = drawGrid
           , appAttrMap = const attMap}
 
 
-handleEvent::Grid Brian->BrickEvent Name Tick->EventM Name (Next (Grid Brian))
+--handleEvent::CA w a=>w a->BrickEvent Name Tick->EventM Name (Next (w a))
+handleEvent::(Comonad w, CA (w c) c)=>(w c)->BrickEvent Name Tick -> EventM Name (Next (w c))
 handleEvent g (AppEvent Tick) = continue $ extend next_gen g
 
 main :: IO ()
@@ -94,4 +95,4 @@ main = do
     forkIO $ forever $ do
         writeBChan chan Tick
         threadDelay 100
-    void $ customMain (V.mkVty V.defaultConfig) (Just chan) app (start_state::Grid Brian)
+    void $ customMain (V.mkVty V.defaultConfig) (Just chan) app start_state_brian

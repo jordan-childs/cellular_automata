@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeFamilies, FlexibleContexts #-}
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
 
@@ -12,6 +13,8 @@ import System.Console.ANSI
 import Control.Concurrent
 import System.Random
 import Control.Monad.State
+import Brick (attrName, AttrName)
+import Data.Vector as Vec (toList)  
 
 sizeX::Int
 sizeX = 300
@@ -74,19 +77,23 @@ instance Comonad Grid where
   duplicate (Grid mtx (x,y)) = Grid (matrix sizeX sizeY (\(w,z)->(Grid mtx (w,z)))) (x,y)
 
 
-class Comonad w=> CA w c where
-  next_gen::w c->c
-  neighborValues::w c->[c]
-  start_state::w c
-  play::Int->w c->IO()
-  showGrid::w c->String
+class CA w c where
+  next_gen::w->c
+  
+  neighborValues::w->[c]
+  start_state::w 
+  showGrid::w->String
+  cellAtt::c->AttrName
+  gridRow::Int->w->[c]
 
 
 getNeighbors::Grid a->[(Int, Int)]
 getNeighbors (Grid mtx (x,y))=filter (\(a,b)->if a==0||b==0||a>sizeX||b>sizeY then False else True) (map (\(w,z)->(w+x, y+z)) neighbors)
 
 
-instance CA Grid Cell where
+
+
+instance CA (Grid Cell) Cell where
   start_state = Grid (matrix sizeX sizeY (\(x,y)->if (any ((x,y)==) cells) then Alive else Dead)) (5,1)
   next_gen (Grid mtx (x,y)) = case (getElem x y mtx) of
                                   Alive -> case (length(filter(\x->x==Alive) (neighborValues (Grid mtx (x,y))))) of
@@ -97,19 +104,16 @@ instance CA Grid Cell where
                                             3-> Alive
                                             _-> Dead
   neighborValues (Grid mtx (x,y)) = fmap (\(y,z)->getElem y z mtx) $ getNeighbors (Grid mtx (x,y))
-  play 0 grid = do
-              clearScreen
-              threadDelay 5000
-              putStr $ showGrid grid
-  play n grid = do
-              clearScreen
-              threadDelay 5000
-              putStr $ showGrid grid
-              play (n-1) (extend next_gen grid)
+
            
   showGrid (Grid mtx p) = show mtx
+  cellAtt x = case x of
+              Alive -> attrName "aliveAttr"
+              Dead  -> attrName "deadAttr"
+  gridRow r (Grid mtx p) = Vec.toList $ getRow r mtx
+                      
 
-instance CA Grid Brian where
+instance CA (Grid Brian) Brian where
   start_state = Grid (matrix sizeX sizeY (\(x,y)->if (any ((x,y)==) cells) then ALV else DED)) (5,1)
   next_gen (Grid mtx (x,y)) = case (getElem x y mtx) of
                                       ALV -> DYING
@@ -118,14 +122,21 @@ instance CA Grid Brian where
                                             _->DED
                                       DYING -> DED 
   neighborValues (Grid mtx (x,y)) = fmap (\(y,z)->getElem y z mtx) $ getNeighbors (Grid mtx (x,y))
-  play 0 grid = do
-                clearScreen
-                threadDelay 500000
-                putStr $ showGrid grid
-  play n grid = do
-                clearScreen
-                threadDelay 500000
-                putStr $ showGrid grid
-                play (n-1) (extend next_gen grid)
+
   showGrid (Grid mtx p) = show mtx
+  cellAtt x = case x of
+                ALV -> attrName "aliveAttr"
+                DED  -> attrName"deadAttr"
+                DYING -> attrName "dyingAttr"
+                
+                
+  gridRow r (Grid mtx p) = Vec.toList $ getRow r mtx
+
+
+start_state_brian::Grid Brian
+start_state_brian = Grid (matrix sizeX sizeY (\(x,y)->if (any ((x,y)==) cells) then ALV else DED)) (5,1)
+
+
+
+
 
