@@ -1,15 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-
-
 module Main where
+
 import Control.Comonad
 import Control.Monad (forever, void)
 import Control.Monad.IO.Class (liftIO)
 import Control.Concurrent (threadDelay, forkIO)
 import Data.Maybe (fromMaybe)
-
 import Brick
     ( App(..), AttrMap, BrickEvent(..), EventM, Next, Widget
     , customMain, neverShowCursor
@@ -31,29 +27,23 @@ import qualified Data.Sequence as S
 import Linear.V2 (V2(..))
 import Lens.Micro ((^.))
 import Data.Matrix
-
-
+import Data.Vector as Vec
 import CellularAutomata
 
-drawGrid::CA (w c) c=>(w c)-> [Widget Name]
+drawGrid::(Comonad w, Cell c, CA (w c) c)=>(w c)-> [Widget Name]
 drawGrid grid = [withBorderStyle BS.unicodeBold
-            $ B.borderWithLabel (str "Conway's Game of Life")
+            $ B.borderWithLabel (str (getName grid))
             $ vBox rows]
         where
             rows = [hBox $ rowCells r | r <- [1..100]] 
-            rowCells  y = [drawCell x | x <- gridRow y grid]
+            rowCells  y = [drawCell x | x <- Vec.toList ( getRow y (fmap cellAttr (getMatrix grid)))]
             
 
-drawCell :: CA w c=>c-> Widget ()
-drawCell cell = withAttr (cellAtt cell) cw
-
-
-
-
+drawCell::AttrName-> Widget ()
+drawCell cell = withAttr cell cw
 
 cw::Widget ()
 cw = str " "
-
 
 aliveAttr, deadAttr::AttrName
 aliveAttr = "aliveAttr"::AttrName
@@ -65,10 +55,8 @@ dyingAttr = "dyingAttr"::AttrName
 attMap::AttrMap
 attMap = attrMap V.defAttr
     [
-        (aliveAttr, V.red `on` V.red)   
-    ,   (deadAttr, V.yellow `on` V.yellow)
-    ,   (alvAttr, V.blue `on` V.blue)
-    ,   (dedAttr, V.black `on` V.black)
+        (aliveAttr, V.blue `on` V.blue)   
+    ,   (deadAttr, V.black `on` V.black)
     ,   (dyingAttr, V.white `on` V.white)
     ]
 
@@ -77,7 +65,7 @@ data Tick = Tick
 
 type Name = ()
 
-app::(Comonad w, CA (w c) c)=>App (w c) Tick Name
+app::(Comonad w, Cell c, CA (w c) c)=>App (w c) Tick Name
 app = App{  appDraw = drawGrid
           , appChooseCursor = neverShowCursor
           , appHandleEvent = handleEvent
@@ -95,4 +83,4 @@ main = do
     forkIO $ forever $ do
         writeBChan chan Tick
         threadDelay 100
-    void $ customMain (V.mkVty V.defaultConfig) (Just chan) app start_state_brian
+    void $ customMain (V.mkVty V.defaultConfig) (Just chan) app start_state_conway
